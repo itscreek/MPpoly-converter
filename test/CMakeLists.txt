@@ -10,9 +10,9 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(unit_test ${TEST_SRC})
 
-target_include_directories(unit_test PRIVATE ${RNSTFHE_SRC_DIR})
+target_include_directories(unit_test PRIVATE ${MPPCONVERTER_SRC_DIR})
 
-target_link_libraries(unit_test PRIVATE rnstfhe gtest_main)
+target_link_libraries(unit_test PRIVATE mppconverter gtest_main)
 
 include(GoogleTest)
 

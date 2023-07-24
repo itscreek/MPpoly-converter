@@ -1,7 +1,7 @@
-set(RNSTFHE_SRC converter.cpp)
+set(MPPCONVERTER_SRC converter.cpp)
 
-set(LOCAL_LIB_DIR /home/jukia/.local/lib)
-set(HEXL_HINT_DIR /home/jukia/.local/lib/cmake/hexl-1.2.5)
+set(GMP_LIB_DIR $ENV{HOME}/.local/lib/libgmp.a)
+set(HEXL_HINT_DIR $ENV{HOME}/.local/lib/cmake/hexl-1.2.5)
 
 find_package(HEXL 1.2.5
     HINTS ${HEXL_HINT_DIR}
@@ -10,5 +10,5 @@ if (NOT TARGET HEXL::hexl)
     message(FATAL_ERROR "TARGET HEXL::hexl not found")
 endif()
 
-add_library(rnstfhe ${RNSTFHE_SRC})
-target_link_libraries(rnstfhe PRIVATE ${LOCAL_LIB_DIR}/libgmp.a)
+add_library(mppconverter STATIC ${MPPCONVERTER_SRC})
+target_link_libraries(mppconverter PRIVATE ${GMP_LIB_DIR})
