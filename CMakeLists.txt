@@ -4,7 +4,8 @@ project(MPPconverter)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(ENABLE_TEST "Build tests" OFF)
+option(ENABLE_TEST "Build tests" ON)
+option(ENABLE_EXAMPLE "Build examples" OFF)
 
 set(MPPCONVERTER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -14,4 +15,7 @@ if (ENABLE_TEST)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(example)
+
+if (ENABLE_EXAMPLE)
+    add_subdirectory(example)
+endif()

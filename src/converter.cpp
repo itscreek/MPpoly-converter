@@ -196,7 +196,8 @@ void PolynomialFormConverter::GarnersAlgorithm(uint64_t *t,
     // modulus_products_[k][k - 1] = q[0]q[1]...q[k-1] (mod. q[k])
     // constants[k] = t[0] + t[1]modulus_[0] + ... +
     //  t[k-1]modulus_[0]modulus_[1]...modulus_[k-2] (mod. modulus_[k])
-    std::vector<uint64_t> constants(num_modulus_, 0);
+
+    uint64_t constants[num_modulus_] = {0};
     for (int k = 0; k < num_modulus_; ++k) {
         int index_of_rns = degree + k * poly_degree_;
         uint64_t tmp = input_rns_poly[index_of_rns];
