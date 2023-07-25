@@ -6,6 +6,20 @@
 #include <utility>
 
 namespace MPPoly {
+inline void UAdd128To128(uint64_t *result, uint64_t *op1, uint64_t *op2) {
+    if (op1[0] > UINT64_MAX - op2[0]) {
+        ++result[1];
+    }
+    result[0] = op1[0] + op2[0];
+    result[1] = op1[1] + op2[1];
+}
+
+inline void UMul64To128(uint64_t *result, uint64_t op1, uint64_t op2) {
+    asm("mulq %[op2]"
+        : "=a"(result[0]), "=d"(result[1])
+        : [op2] "g"(op2), "a"(op1));
+}
+
 inline uint64_t UMulMod64To64(uint64_t op1, uint64_t op2, uint64_t divisor) {
     uint64_t quotient;
     uint64_t remainder;
@@ -150,6 +164,11 @@ void PolynomialFormConverter::GMPQuotientRingToRNS(uint64_t *output_rns_poly) {
 
 void PolynomialFormConverter::RNSToQuotientRing(uint64_t *quotient_ring_poly,
                                                 uint64_t *rns_poly) {
+    if (coeff_word_length_ <= 2) {
+        RNSToUInt128QuotientRing(quotient_ring_poly, rns_poly);
+        return;
+    }
+
     for (int i = 0; i < poly_degree_; ++i) {
         RNSToGMPIntCoeff(rns_poly, i);
     }
@@ -167,8 +186,9 @@ void PolynomialFormConverter::RNSToQuotientRing(uint64_t *quotient_ring_poly,
     }
 }
 
-void PolynomialFormConverter::RNSToGMPIntCoeff(uint64_t *input_rns_poly,
-                                               int degree) {
+void PolynomialFormConverter::GarnersAlgorithm(uint64_t *t,
+                                               uint64_t *input_rns_poly,
+                                               const int degree) {
     // Garner's algorithm
     // for each step, we solve
     //  "modulus_products_[k][k - 1] * t[k] + constants[k] = b[k] (mod. q[k])"
@@ -177,7 +197,6 @@ void PolynomialFormConverter::RNSToGMPIntCoeff(uint64_t *input_rns_poly,
     // constants[k] = t[0] + t[1]modulus_[0] + ... +
     //  t[k-1]modulus_[0]modulus_[1]...modulus_[k-2] (mod. modulus_[k])
     std::vector<uint64_t> constants(num_modulus_, 0);
-    std::vector<uint64_t> t(num_modulus_);
     for (int k = 0; k < num_modulus_; ++k) {
         int index_of_rns = degree + k * poly_degree_;
         uint64_t tmp = input_rns_poly[index_of_rns];
@@ -200,12 +219,57 @@ void PolynomialFormConverter::RNSToGMPIntCoeff(uint64_t *input_rns_poly,
                 modulus_[i];
         }
     }
+}
+
+void PolynomialFormConverter::RNSToUInt128QuotientRing(
+    uint64_t *quotient_ring_poly, uint64_t *rns_poly) {
+    // Suppose coeff_word_length_ = 2
+    constexpr int word_length = 2;
+
+    uint64_t *input_rns_poly = rns_poly;
+    uint64_t copy[poly_degree_ * modulus_.size()];
+    if (rns_poly == quotient_ring_poly) {
+        for (int i = 0; i < poly_degree_ * modulus_.size(); ++i) {
+            copy[i] = rns_poly[i];
+        }
+        input_rns_poly = copy;
+    }
+
+    for (int degree = 0; degree < poly_degree_; ++degree) {
+        uint64_t t[num_modulus_] = {0};
+        GarnersAlgorithm(t, input_rns_poly, degree);
+
+        quotient_ring_poly[word_length * degree] = 0;
+        quotient_ring_poly[word_length * degree + 1] = 0;
+        for (int k = 0; k < num_modulus_; ++k) {
+            uint64_t term[word_length];
+            term[0] = t[k];
+            term[1] = 0;
+            for (int j = 0; j <= k - 1; ++j) {
+                // compute term = term[1]::term[0] * modulus_[j]
+                uint64_t term_low_times_mod[word_length] = {0};
+                UMul64To128(term_low_times_mod, term[0], modulus_[j]);
+                uint64_t term_high_times_mod = term[1] * modulus_[j];
+                term[0] = term_low_times_mod[0];
+                term[1] = term_low_times_mod[1] + term_high_times_mod;
+            }
+
+            UAdd128To128(quotient_ring_poly + (word_length * degree),
+                         quotient_ring_poly + (word_length * degree), term);
+        }
+    }
+}
+
+void PolynomialFormConverter::RNSToGMPIntCoeff(uint64_t *input_rns_poly,
+                                               const int degree) {
+    uint64_t t[num_modulus_] = {0};
+    GarnersAlgorithm(t, input_rns_poly, degree);
 
     mpz_set_ui(mp_coeff_[degree], 0);
     mpz_t term;
     mpz_init(term);
     for (int k = 0; k < num_modulus_; ++k) {
-        mpz_import(term, 1, -1, sizeof(uint64_t), 0, 0, t.data() + k);
+        mpz_import(term, 1, -1, sizeof(uint64_t), 0, 0, t + k);
         for (int j = 0; j <= k - 1; ++j) {
             mpz_mul(term, term, mp_modulus_[j]);
         }

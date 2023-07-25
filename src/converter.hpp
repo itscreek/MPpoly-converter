@@ -48,7 +48,11 @@ class PolynomialFormConverter {
 
     void GMPQuotientRingToRNS(uint64_t *output_rns_poly);
 
-    void RNSToGMPIntCoeff(uint64_t *input_rns_poly, int degree);
+    void GarnersAlgorithm(uint64_t *t, uint64_t *input_rns_poly, const int degree);
+
+    void RNSToUInt128QuotientRing(uint64_t *quotient_ring_poly, uint64_t *rns_poly);
+
+    void RNSToGMPIntCoeff(uint64_t *input_rns_poly, const int degree);
 
     void ComputeModulusProducts();
 
