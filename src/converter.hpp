@@ -43,6 +43,9 @@ class PolynomialFormConverter {
     // modulus_[l-1])^ -1 mod modulus_[l] = modulus_products_[l][l-1] ^ -1
     std::vector<uint64_t> inverse_of_modulus_products_;
 
+    void UInt128QuotientRingToRNS(uint64_t *rns_poly,
+                                  uint64_t *quotient_ring_poly);
+
     void GMPQuotientRingToRNS(uint64_t *output_rns_poly);
 
     void RNSToGMPIntCoeff(uint64_t *input_rns_poly, int degree);

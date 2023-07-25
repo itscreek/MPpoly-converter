@@ -6,20 +6,6 @@
 #include <utility>
 
 namespace MPPoly {
-
-/* inline uint64_t UAddMod64To64(uint64_t op1, uint64_t op2, uint64_t divisor) {
-    if (UINT64_MAX - op1 <= op2){
-        return (op1 + op2) % divisor;
-    }
-
-    if (op1 < op2){
-        std::swap(op1, op2);
-    }
-    uint64_t overflow_num = (op1 - (UINT64_MAX / 2 + 1)) + (op2 - UINT64_MAX /
-2); uint64_t subtrahend = (overflow_num / divisor + 1) * divisor; return ((op1 -
-(subtrahend - (subtrahend / 2))) + (op2 - subtrahend / 2)) % divisor;
-} */
-
 inline uint64_t UMulMod64To64(uint64_t op1, uint64_t op2, uint64_t divisor) {
     uint64_t quotient;
     uint64_t remainder;
@@ -31,11 +17,14 @@ inline uint64_t UMulMod64To64(uint64_t op1, uint64_t op2, uint64_t divisor) {
 }
 
 inline uint64_t UMod128To64(uint64_t low, uint64_t high, uint64_t divisor) {
+    if (high > divisor) {
+        high %= divisor;
+    }
     uint64_t result;
     uint64_t remainder;
     asm("divq %[d];"
         : "=a"(result), "=d"(remainder)
-        : [d] "r"(divisor), "a"(low), "d"(high));
+        : [d] "g"(divisor), "a"(low), "d"(high));
     return remainder;
 }
 
@@ -109,6 +98,11 @@ PolynomialFormConverter::~PolynomialFormConverter() {
 
 void PolynomialFormConverter::QuotientRingToRNS(uint64_t *rns_poly,
                                                 uint64_t *quotient_ring_poly) {
+    if (coeff_word_length_ <= 2) {
+        UInt128QuotientRingToRNS(rns_poly, quotient_ring_poly);
+        return;
+    }
+
     // set mp_coeff_
     for (int i = 0; i < poly_degree_; ++i) {
         mpz_set_ui(mp_coeff_[i], 0);
@@ -119,13 +113,33 @@ void PolynomialFormConverter::QuotientRingToRNS(uint64_t *rns_poly,
     GMPQuotientRingToRNS(rns_poly);
 }
 
+void PolynomialFormConverter::UInt128QuotientRingToRNS(
+    uint64_t *rns_poly, uint64_t *quotient_ring_poly) {
+    uint64_t *input_poly = quotient_ring_poly;
+    uint64_t copy[coeff_word_length_ * poly_degree_];
+    if (rns_poly == quotient_ring_poly) {
+        for (int i = 0; i < coeff_word_length_ * poly_degree_; ++i) {
+            copy[i] = quotient_ring_poly[i];
+        }
+        input_poly = copy;
+    }
+
+    for (int i = 0; i < poly_degree_; ++i) {
+        for (int l = 0; l < num_modulus_; ++l) {
+            rns_poly[i + l * poly_degree_] = UMod128To64(
+                input_poly[coeff_word_length_ * i],
+                input_poly[coeff_word_length_ * i + 1], modulus_[l]);
+        }
+    }
+}
+
 void PolynomialFormConverter::GMPQuotientRingToRNS(uint64_t *output_rns_poly) {
     mpz_t mp_remainder;
     mpz_init(mp_remainder);
     for (int i = 0; i < poly_degree_; ++i) {
-        for (int q = 0; q < num_modulus_; ++q) {
-            mpz_mod(mp_remainder, mp_coeff_[i], mp_modulus_[q]);
-            uint64_t *coeff_p = output_rns_poly + (i + q * poly_degree_);
+        for (int l = 0; l < num_modulus_; ++l) {
+            mpz_mod(mp_remainder, mp_coeff_[i], mp_modulus_[l]);
+            uint64_t *coeff_p = output_rns_poly + (i + l * poly_degree_);
             *coeff_p = 0;
             mpz_export(coeff_p, NULL, -1, sizeof(uint64_t), 0, 0, mp_remainder);
         }
@@ -141,12 +155,14 @@ void PolynomialFormConverter::RNSToQuotientRing(uint64_t *quotient_ring_poly,
     }
 
     // export mp_coeff_ to quotient_ring_poly
-    for (int i = 0; i < coeff_word_length_ * poly_degree_; ++i) {
-        quotient_ring_poly[i] = 0;
-    }
     size_t count = coeff_word_length_;
     for (int i = 0; i < poly_degree_; ++i) {
         uint64_t *target = quotient_ring_poly + (i * coeff_word_length_);
+        if (mpz_sgn(mp_coeff_[i]) == 0) {
+            for (int j = 0; j < coeff_word_length_; ++j) {
+                target[j] = 0;
+            }
+        }
         mpz_export(target, &count, -1, sizeof(uint64_t), 0, 0, mp_coeff_[i]);
     }
 }
